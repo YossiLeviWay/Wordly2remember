@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+.firebase/
+firestore.rules
+firebase-blueprint.json
