@@ -7,7 +7,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Volume2, ChevronRight, RotateCcw, Flame, CheckCircle2, BookOpen, 
   Layout, History, Settings, Play, Plus, Trash2, Save, X, 
-  LogOut, LogIn, Grid, FileText, Search, ArrowLeft, MoreVertical
+  LogOut, LogIn, Grid, FileText, Search, ArrowLeft, MoreVertical,
+  Home, Languages
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -118,6 +119,7 @@ export default function App() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [sessionResults, setSessionResults] = useState<any[]>([]);
   const [streak, setStreak] = useState(0);
+  const [frontLang, setFrontLang] = useState<'english' | 'hebrew'>('hebrew');
 
   // Connection Test
   useEffect(() => {
@@ -327,9 +329,19 @@ export default function App() {
                   <p className="text-xs text-slate-400">Ready to learn?</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 bg-orange-50 dark:bg-orange-900/20 px-3 py-1.5 rounded-full">
-                <Flame className="w-5 h-5 text-orange-500 fill-orange-500" />
-                <span className="font-bold text-orange-600 dark:text-orange-400">{streak}</span>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setFrontLang(frontLang === 'english' ? 'hebrew' : 'english')}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full text-[10px] font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-all"
+                  title="Toggle front language"
+                >
+                  <Languages className="w-3 h-3" />
+                  {frontLang === 'english' ? 'EN → HE' : 'HE → EN'}
+                </button>
+                <div className="flex items-center gap-2 bg-orange-50 dark:bg-orange-900/20 px-3 py-1.5 rounded-full">
+                  <Flame className="w-5 h-5 text-orange-500 fill-orange-500" />
+                  <span className="font-bold text-orange-600 dark:text-orange-400">{streak}</span>
+                </div>
               </div>
             </div>
 
@@ -397,25 +409,29 @@ export default function App() {
           </motion.div>
         )}
 
-        {view === 'editor' && (
-          <SetEditor 
-            user={user} 
-            activeSet={activeSet} 
-            initialWords={activeWords} 
-            onClose={() => setView('dashboard')} 
-          />
-        )}
+    {view === 'editor' && (
+      <SetEditor 
+        user={user} 
+        activeSet={activeSet} 
+        initialWords={activeWords} 
+        onClose={() => setView('dashboard')} 
+        onHome={() => setView('dashboard')}
+      />
+    )}
 
-        {view === 'session' && (
-          <LearningSession 
-            words={activeWords} 
-            currentIndex={currentIndex}
-            isFlipped={isFlipped}
-            setIsFlipped={setIsFlipped}
-            onRate={handleRating}
-            speak={speak}
-          />
-        )}
+    {view === 'session' && (
+      <LearningSession 
+        words={activeWords} 
+        currentIndex={currentIndex}
+        isFlipped={isFlipped}
+        setIsFlipped={setIsFlipped}
+        onRate={handleRating}
+        speak={speak}
+        frontLang={frontLang}
+        setFrontLang={setFrontLang}
+        onHome={() => setView('dashboard')}
+      />
+    )}
 
         {view === 'summary' && (
           <SummaryView 
@@ -432,7 +448,7 @@ export default function App() {
 
 // --- Sub-components ---
 
-function SetEditor({ user, activeSet, initialWords, onClose }: any) {
+function SetEditor({ user, activeSet, initialWords, onClose, onHome }: any) {
   const [title, setTitle] = useState(activeSet?.title || '');
   const [words, setWords] = useState<Word[]>(initialWords);
   const [bulkText, setBulkText] = useState('');
@@ -528,9 +544,14 @@ function SetEditor({ user, activeSet, initialWords, onClose }: any) {
       exit={{ opacity: 0, x: -50 }}
       className="flex-1 flex flex-col p-6 overflow-hidden"
     >
-      <div className="flex items-center gap-4 mb-6">
-        <button onClick={onClose} className="p-2 -ml-2 text-slate-400 hover:text-slate-600"><ArrowLeft className="w-6 h-6" /></button>
-        <h2 className="text-xl font-bold">{activeSet ? 'Edit Set' : 'New Set'}</h2>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <button onClick={onClose} className="p-2 -ml-2 text-slate-400 hover:text-slate-600"><ArrowLeft className="w-6 h-6" /></button>
+          <h2 className="text-xl font-bold">{activeSet ? 'Edit Set' : 'New Set'}</h2>
+        </div>
+        <button onClick={onHome} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
+          <Home className="w-6 h-6" />
+        </button>
       </div>
 
       <Input 
@@ -606,9 +627,14 @@ function SetEditor({ user, activeSet, initialWords, onClose }: any) {
   );
 }
 
-function LearningSession({ words, currentIndex, isFlipped, setIsFlipped, onRate, speak }: any) {
+function LearningSession({ words, currentIndex, isFlipped, setIsFlipped, onRate, speak, frontLang, setFrontLang, onHome }: any) {
   const card = words[currentIndex];
   const progress = ((currentIndex) / words.length) * 100;
+
+  const frontText = frontLang === 'english' ? card.english : card.hebrew;
+  const backText = frontLang === 'english' ? card.hebrew : card.english;
+  const isFrontRTL = frontLang === 'hebrew';
+  const isBackRTL = frontLang === 'english';
 
   return (
     <motion.div 
@@ -618,6 +644,19 @@ function LearningSession({ words, currentIndex, isFlipped, setIsFlipped, onRate,
       exit={{ opacity: 0 }}
       className="flex-1 flex flex-col p-6"
     >
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={onHome} className="p-2 -ml-2 text-slate-400 hover:text-blue-600 transition-colors">
+          <Home className="w-6 h-6" />
+        </button>
+        <button 
+          onClick={() => setFrontLang(frontLang === 'english' ? 'hebrew' : 'english')}
+          className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-all"
+        >
+          <Languages className="w-3.5 h-3.5" />
+          {frontLang === 'english' ? 'EN → HE' : 'HE → EN'}
+        </button>
+      </div>
+
       <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mb-8 overflow-hidden">
         <motion.div 
           className="bg-blue-500 h-full" 
@@ -640,8 +679,8 @@ function LearningSession({ words, currentIndex, isFlipped, setIsFlipped, onRate,
         >
           {!isFlipped ? (
             <div className="text-center">
-              <p className="text-4xl font-bold tracking-tight text-slate-800 dark:text-slate-100 mb-4" dir="rtl">
-                {card.hebrew}
+              <p className={cn("text-4xl font-bold tracking-tight text-slate-800 dark:text-slate-100 mb-4", isFrontRTL ? "font-hebrew" : "")} dir={isFrontRTL ? "rtl" : "ltr"}>
+                {frontText}
               </p>
               <p className="text-slate-400 text-sm uppercase tracking-widest font-semibold">Tap to Reveal</p>
             </div>
@@ -653,8 +692,8 @@ function LearningSession({ words, currentIndex, isFlipped, setIsFlipped, onRate,
               >
                 <Volume2 className="w-8 h-8" />
               </button>
-              <p className="text-5xl font-black text-slate-800 dark:text-slate-100 mb-2">
-                {card.english}
+              <p className={cn("text-5xl font-black text-slate-800 dark:text-slate-100 mb-2", isBackRTL ? "font-hebrew" : "")} dir={isBackRTL ? "rtl" : "ltr"}>
+                {backText}
               </p>
             </div>
           )}
@@ -683,7 +722,7 @@ function LearningSession({ words, currentIndex, isFlipped, setIsFlipped, onRate,
           </div>
         ) : (
            <div className="flex flex-col items-center mb-10">
-              <p className="text-slate-400 text-xs mb-4">Think of the English word...</p>
+              <p className="text-slate-400 text-xs mb-4">Think of the {frontLang === 'english' ? 'Hebrew' : 'English'} word...</p>
               <Button onClick={() => { speak(card.english); setIsFlipped(true); }} className="w-full py-5 text-lg">
                 Reveal Answer
                 <ChevronRight className="w-5 h-5" />
@@ -701,8 +740,14 @@ function SummaryView({ results, streak, onFinish, onRestart }: any) {
       key="summary"
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="flex-1 flex flex-col p-10 items-center justify-center text-center"
+      className="flex-1 flex flex-col p-10 items-center justify-center text-center relative"
     >
+      <button 
+        onClick={onFinish} 
+        className="absolute top-6 left-6 p-2 text-slate-400 hover:text-blue-600 transition-colors"
+      >
+        <Home className="w-6 h-6" />
+      </button>
       <div className="w-24 h-24 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-full flex items-center justify-center mb-6">
         <CheckCircle2 className="w-12 h-12" />
       </div>
