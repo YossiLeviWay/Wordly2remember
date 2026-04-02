@@ -28,6 +28,7 @@ interface Word {
   level: number;
   nextReview: number;
   lastReviewed?: number;
+  setId?: string;
 }
 
 interface WordSet {
@@ -187,7 +188,7 @@ export default function App() {
     const unsubscribes = wordSets.map(set => {
       const wordsRef = collection(db, 'word_sets', set.id, 'words');
       return onSnapshot(wordsRef, (snap) => {
-        const setWords = snap.docs.map(d => ({ id: d.id, ...d.data() } as Word));
+        const setWords = snap.docs.map(d => ({ id: d.id, setId: set.id, ...d.data() } as Word));
         setGlobalWords(prev => {
           const otherWords = prev.filter(w => !snap.docs.some(d => d.id === w.id));
           return [...otherWords, ...setWords];
@@ -198,12 +199,18 @@ export default function App() {
     return () => unsubscribes.forEach(unsub => unsub());
   }, [user, wordSets]);
 
-  const smartLists = useMemo(() => [
-    { id: 'again', title: 'Again', color: 'text-red-500', bg: 'bg-red-50', darkBg: 'dark:bg-red-900/20', icon: RotateCcw, count: globalWords.filter(w => w.level === 0).length },
-    { id: 'hard', title: 'Hard', color: 'text-orange-500', bg: 'bg-orange-50', darkBg: 'dark:bg-orange-900/20', icon: Flame, count: globalWords.filter(w => w.level === 1).length },
-    { id: 'good', title: 'Good', color: 'text-green-500', bg: 'bg-green-50', darkBg: 'dark:bg-green-900/20', icon: CheckCircle2, count: globalWords.filter(w => w.level === 2).length },
-    { id: 'easy', title: 'Easy', color: 'text-blue-500', bg: 'bg-blue-50', darkBg: 'dark:bg-blue-900/20', icon: BookOpen, count: globalWords.filter(w => w.level >= 3).length },
-  ], [globalWords]);
+  const smartLists = useMemo(() => {
+    const now = Date.now();
+    const getDueCount = (level: number) => globalWords.filter(w => w.level === level && (!w.nextReview || w.nextReview <= now)).length;
+    const getEasyDueCount = () => globalWords.filter(w => w.level >= 3 && (!w.nextReview || w.nextReview <= now)).length;
+
+    return [
+      { id: 'again', title: 'Again', color: 'text-red-500', bg: 'bg-red-50', darkBg: 'dark:bg-red-900/20', icon: RotateCcw, count: globalWords.filter(w => w.level === 0).length, dueCount: getDueCount(0) },
+      { id: 'hard', title: 'Hard', color: 'text-orange-500', bg: 'bg-orange-50', darkBg: 'dark:bg-orange-900/20', icon: Flame, count: globalWords.filter(w => w.level === 1).length, dueCount: getDueCount(1) },
+      { id: 'good', title: 'Good', color: 'text-green-500', bg: 'bg-green-50', darkBg: 'dark:bg-green-900/20', icon: CheckCircle2, count: globalWords.filter(w => w.level === 2).length, dueCount: getDueCount(2) },
+      { id: 'easy', title: 'Easy', color: 'text-blue-500', bg: 'bg-blue-50', darkBg: 'dark:bg-blue-900/20', icon: BookOpen, count: globalWords.filter(w => w.level >= 3).length, dueCount: getEasyDueCount() },
+    ];
+  }, [globalWords]);
 
   // TTS Helper
   const speak = useCallback((text: string) => {
@@ -235,10 +242,11 @@ export default function App() {
     };
 
     // Update in Firestore
-    if (activeSet && word.id) {
-      const path = `word_sets/${activeSet.id}/words/${word.id}`;
+    const effectiveSetId = activeSet?.id || word.setId;
+    if (effectiveSetId && word.id) {
+      const path = `word_sets/${effectiveSetId}/words/${word.id}`;
       try {
-        const wordRef = doc(db, 'word_sets', activeSet.id, 'words', word.id);
+        const wordRef = doc(db, 'word_sets', effectiveSetId, 'words', word.id);
         await updateDoc(wordRef, {
           level: updatedWord.level,
           nextReview: updatedWord.nextReview,
@@ -259,7 +267,30 @@ export default function App() {
     }
   };
 
-  const startSession = async (set: WordSet) => {
+  const startSmartSession = (listId: string) => {
+    const now = Date.now();
+    const filteredWords = globalWords.filter((w: Word) => {
+      const isDue = !w.nextReview || w.nextReview <= now;
+      if (!isDue) return false;
+      if (listId === 'again') return w.level === 0;
+      if (listId === 'hard') return w.level === 1;
+      if (listId === 'good') return w.level === 2;
+      if (listId === 'easy') return w.level >= 3;
+      return false;
+    });
+
+    if (filteredWords.length === 0) {
+      alert("No words due for review in this list!");
+      return;
+    }
+
+    setActiveSet(null); // Clear active set for smart session
+    setActiveWords(filteredWords);
+    setCurrentIndex(0);
+    setIsFlipped(false);
+    setSessionResults([]);
+    setView('session');
+  };
     setActiveSet(set);
     const path = `word_sets/${set.id}/words`;
     try {
@@ -397,10 +428,15 @@ export default function App() {
                     setView('smart_list');
                   }}
                   className={cn(
-                    "flex flex-col items-center p-3 rounded-2xl transition-all border border-transparent hover:border-blue-200 dark:hover:border-blue-900",
+                    "flex flex-col items-center p-3 rounded-2xl transition-all border border-transparent hover:border-blue-200 dark:hover:border-blue-900 relative",
                     list.bg, list.darkBg, list.color
                   )}
                 >
+                  {list.dueCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white dark:border-slate-950 font-bold">
+                      {list.dueCount}
+                    </span>
+                  )}
                   <list.icon className="w-5 h-5 mb-1" />
                   <span className="text-[10px] font-bold uppercase tracking-tighter">{list.title}</span>
                   <span className="text-lg font-black">{list.count}</span>
@@ -489,6 +525,7 @@ export default function App() {
         listId={selectedSmartList}
         words={globalWords}
         onHome={() => setView('dashboard')}
+        onPractice={() => startSmartSession(selectedSmartList!)}
         speak={speak}
       />
     )}
@@ -836,7 +873,8 @@ function SummaryView({ results, streak, onFinish, onRestart }: any) {
   );
 }
 
-function SmartListView({ listId, words, onHome, speak }: any) {
+function SmartListView({ listId, words, onHome, onPractice, speak }: any) {
+  const now = Date.now();
   const filteredWords = words.filter((w: Word) => {
     if (listId === 'again') return w.level === 0;
     if (listId === 'hard') return w.level === 1;
@@ -844,6 +882,8 @@ function SmartListView({ listId, words, onHome, speak }: any) {
     if (listId === 'easy') return w.level >= 3;
     return false;
   });
+
+  const dueWords = filteredWords.filter((w: Word) => !w.nextReview || w.nextReview <= now);
 
   const titles: any = {
     again: 'Again List',
@@ -878,6 +918,13 @@ function SmartListView({ listId, words, onHome, speak }: any) {
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-3 pb-6">
+        {dueWords.length > 0 && (
+          <Button onClick={onPractice} className="w-full py-4 mb-4 bg-blue-600">
+            <Play className="w-4 h-4" />
+            Practice {dueWords.length} Due Words
+          </Button>
+        )}
+        
         {filteredWords.length === 0 ? (
           <div className="text-center py-20 text-slate-400">
             <p>No words in this list yet.</p>
@@ -894,8 +941,11 @@ function SmartListView({ listId, words, onHome, speak }: any) {
                 </div>
                 <p className="text-slate-500 text-sm font-hebrew" dir="rtl">{word.hebrew}</p>
               </div>
-              <div className="text-[10px] text-slate-400 font-mono">
-                {word.nextReview ? new Date(word.nextReview).toLocaleDateString() : 'New'}
+              <div className="text-[10px] text-slate-400 font-mono flex flex-col items-end">
+                <span>{word.nextReview ? new Date(word.nextReview).toLocaleDateString() : 'New'}</span>
+                {word.nextReview && word.nextReview <= now && (
+                  <span className="text-red-500 font-bold uppercase text-[8px]">Due Now</span>
+                )}
               </div>
             </div>
           ))
