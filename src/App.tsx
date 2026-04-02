@@ -111,8 +111,9 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'dashboard' | 'session' | 'editor' | 'summary'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'session' | 'editor' | 'summary' | 'smart_list'>('dashboard');
   const [wordSets, setWordSets] = useState<WordSet[]>([]);
+  const [globalWords, setGlobalWords] = useState<Word[]>([]);
   const [activeSet, setActiveSet] = useState<WordSet | null>(null);
   const [activeWords, setActiveWords] = useState<Word[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -120,6 +121,7 @@ export default function App() {
   const [sessionResults, setSessionResults] = useState<any[]>([]);
   const [streak, setStreak] = useState(0);
   const [frontLang, setFrontLang] = useState<'english' | 'hebrew'>('hebrew');
+  const [selectedSmartList, setSelectedSmartList] = useState<string | null>(null);
 
   // Connection Test
   useEffect(() => {
@@ -175,6 +177,34 @@ export default function App() {
     return unsubscribe;
   }, [user]);
 
+  // Global Words Listener
+  useEffect(() => {
+    if (!user || wordSets.length === 0) {
+      setGlobalWords([]);
+      return;
+    }
+    
+    const unsubscribes = wordSets.map(set => {
+      const wordsRef = collection(db, 'word_sets', set.id, 'words');
+      return onSnapshot(wordsRef, (snap) => {
+        const setWords = snap.docs.map(d => ({ id: d.id, ...d.data() } as Word));
+        setGlobalWords(prev => {
+          const otherWords = prev.filter(w => !snap.docs.some(d => d.id === w.id));
+          return [...otherWords, ...setWords];
+        });
+      });
+    });
+
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [user, wordSets]);
+
+  const smartLists = useMemo(() => [
+    { id: 'again', title: 'Again', color: 'text-red-500', bg: 'bg-red-50', darkBg: 'dark:bg-red-900/20', icon: RotateCcw, count: globalWords.filter(w => w.level === 0).length },
+    { id: 'hard', title: 'Hard', color: 'text-orange-500', bg: 'bg-orange-50', darkBg: 'dark:bg-orange-900/20', icon: Flame, count: globalWords.filter(w => w.level === 1).length },
+    { id: 'good', title: 'Good', color: 'text-green-500', bg: 'bg-green-50', darkBg: 'dark:bg-green-900/20', icon: CheckCircle2, count: globalWords.filter(w => w.level === 2).length },
+    { id: 'easy', title: 'Easy', color: 'text-blue-500', bg: 'bg-blue-50', darkBg: 'dark:bg-blue-900/20', icon: BookOpen, count: globalWords.filter(w => w.level >= 3).length },
+  ], [globalWords]);
+
   // TTS Helper
   const speak = useCallback((text: string) => {
     const utterance = new SpeechSynthesisUtterance(text);
@@ -189,16 +219,17 @@ export default function App() {
     const now = Date.now();
     
     let interval = 0;
+    let newLevel = 0;
     switch (rating) {
-      case 'again': interval = 0; break; // 0 min
-      case 'hard': interval = 2 * 24 * 60 * 60 * 1000; break; // 2 days
-      case 'good': interval = 4 * 24 * 60 * 60 * 1000; break; // 4 days
-      case 'easy': interval = 7 * 24 * 60 * 60 * 1000; break; // 7 days
+      case 'again': interval = 0; newLevel = 0; break; // 0 min
+      case 'hard': interval = 2 * 24 * 60 * 60 * 1000; newLevel = 1; break; // 2 days
+      case 'good': interval = 4 * 24 * 60 * 60 * 1000; newLevel = 2; break; // 4 days
+      case 'easy': interval = 7 * 24 * 60 * 60 * 1000; newLevel = 3; break; // 7 days
     }
 
     const updatedWord = {
       ...word,
-      level: rating === 'again' ? 0 : (word.level || 0) + 1,
+      level: newLevel,
       nextReview: now + interval,
       lastReviewed: now
     };
@@ -357,6 +388,26 @@ export default function App() {
               </Button>
             </div>
 
+            <div className="grid grid-cols-4 gap-2 mb-8">
+              {smartLists.map(list => (
+                <button 
+                  key={list.id}
+                  onClick={() => {
+                    setSelectedSmartList(list.id);
+                    setView('smart_list');
+                  }}
+                  className={cn(
+                    "flex flex-col items-center p-3 rounded-2xl transition-all border border-transparent hover:border-blue-200 dark:hover:border-blue-900",
+                    list.bg, list.darkBg, list.color
+                  )}
+                >
+                  <list.icon className="w-5 h-5 mb-1" />
+                  <span className="text-[10px] font-bold uppercase tracking-tighter">{list.title}</span>
+                  <span className="text-lg font-black">{list.count}</span>
+                </button>
+              ))}
+            </div>
+
             <div className="flex items-center justify-between mb-4 px-2">
               <h3 className="font-bold flex items-center gap-2">
                 <Layout className="w-4 h-4" />
@@ -430,6 +481,15 @@ export default function App() {
         frontLang={frontLang}
         setFrontLang={setFrontLang}
         onHome={() => setView('dashboard')}
+      />
+    )}
+
+    {view === 'smart_list' && (
+      <SmartListView 
+        listId={selectedSmartList}
+        words={globalWords}
+        onHome={() => setView('dashboard')}
+        speak={speak}
       />
     )}
 
@@ -772,6 +832,79 @@ function SummaryView({ results, streak, onFinish, onRestart }: any) {
         <RotateCcw className="w-4 h-4" />
         Restart Session
       </button>
+    </motion.div>
+  );
+}
+
+function SmartListView({ listId, words, onHome, speak }: any) {
+  const filteredWords = words.filter((w: Word) => {
+    if (listId === 'again') return w.level === 0;
+    if (listId === 'hard') return w.level === 1;
+    if (listId === 'good') return w.level === 2;
+    if (listId === 'easy') return w.level >= 3;
+    return false;
+  });
+
+  const titles: any = {
+    again: 'Again List',
+    hard: 'Hard List',
+    good: 'Good List',
+    easy: 'Easy List'
+  };
+
+  const colors: any = {
+    again: 'text-red-600 bg-red-50 dark:bg-red-900/20',
+    hard: 'text-orange-600 bg-orange-50 dark:bg-orange-900/20',
+    good: 'text-green-600 bg-green-50 dark:bg-green-900/20',
+    easy: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20'
+  };
+
+  return (
+    <motion.div 
+      key="smart_list"
+      initial={{ opacity: 0, x: 50 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -50 }}
+      className="flex-1 flex flex-col p-6 overflow-hidden"
+    >
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <button onClick={onHome} className="p-2 -ml-2 text-slate-400 hover:text-slate-600"><ArrowLeft className="w-6 h-6" /></button>
+          <h2 className="text-xl font-bold">{titles[listId]}</h2>
+        </div>
+        <div className={cn("px-3 py-1 rounded-full text-xs font-bold", colors[listId])}>
+          {filteredWords.length} words
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto space-y-3 pb-6">
+        {filteredWords.length === 0 ? (
+          <div className="text-center py-20 text-slate-400">
+            <p>No words in this list yet.</p>
+          </div>
+        ) : (
+          filteredWords.map((word: Word) => (
+            <div key={word.id} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 rounded-2xl flex items-center justify-between group">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="font-bold text-slate-800 dark:text-slate-100">{word.english}</p>
+                  <button onClick={() => speak(word.english)} className="p-1 text-slate-300 hover:text-blue-500 transition-colors">
+                    <Volume2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p className="text-slate-500 text-sm font-hebrew" dir="rtl">{word.hebrew}</p>
+              </div>
+              <div className="text-[10px] text-slate-400 font-mono">
+                {word.nextReview ? new Date(word.nextReview).toLocaleDateString() : 'New'}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <Button onClick={onHome} className="w-full py-4">
+        Back to Dashboard
+      </Button>
     </motion.div>
   );
 }
