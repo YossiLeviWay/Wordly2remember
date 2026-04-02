@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: users
+    // Document ID: userId (auth.uid)
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required, email format)
+    //   - displayName: string
+    //   - photoURL: string (url format)
+    //   - streak: number
+    //   - lastActive: string (ISO 8601)
+    //
+    // Collection: word_sets
+    // Document ID: setId (auto-generated)
+    // Fields:
+    //   - userId: string (required, owner)
+    //   - title: string (required)
+    //   - createdAt: timestamp
+    //   - wordCount: number
+    //
+    // Collection: word_sets/{setId}/words
+    // Document ID: wordId (auto-generated)
+    // Fields:
+    //   - english: string (required)
+    //   - hebrew: string (required)
+    //   - level: number
+    //   - nextReview: number (timestamp as number)
+    //   - lastReviewed: number (timestamp as number)
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "yossi.levi011@gmail.com" && request.auth.token.email_verified == true);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'streak', 'lastActive']) &&
+             data.keys().hasAll(['uid', 'email']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             (data.get('displayName', '') is string) &&
+             (data.get('photoURL', 'https://') is string) &&
+             (data.get('streak', 0) is number);
+    }
+
+    function isValidWordSet(data) {
+      return data.keys().hasOnly(['userId', 'title', 'createdAt', 'wordCount']) &&
+             data.keys().hasAll(['userId', 'title']) &&
+             data.userId == request.auth.uid &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100;
+    }
+
+    function isValidWord(data) {
+      return data.keys().hasOnly(['english', 'hebrew', 'level', 'nextReview', 'lastReviewed']) &&
+             data.keys().hasAll(['english', 'hebrew']) &&
+             data.english is string && data.english.size() > 0 && data.english.size() < 500 &&
+             data.hebrew is string && data.hebrew.size() > 0 && data.hebrew.size() < 500 &&
+             (data.get('level', 0) is number) &&
+             (data.get('nextReview', 0) is number);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /word_sets/{setId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidWordSet(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidWordSet(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      match /words/{wordId} {
+        allow read: if isAuthenticated() && (get(/databases/$(database)/documents/word_sets/$(setId)).data.userId == request.auth.uid || isAdmin());
+        allow create: if isAuthenticated() && (get(/databases/$(database)/documents/word_sets/$(setId)).data.userId == request.auth.uid || isAdmin()) && isValidWord(request.resource.data);
+        allow update: if isAuthenticated() && (get(/databases/$(database)/documents/word_sets/$(setId)).data.userId == request.auth.uid || isAdmin()) && isValidWord(request.resource.data);
+        allow delete: if isAuthenticated() && (get(/databases/$(database)/documents/word_sets/$(setId)).data.userId == request.auth.uid || isAdmin());
+      }
+    }
+  }
+}

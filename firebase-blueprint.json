@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user-specific settings and profile information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "streak": { "type": "number" },
+        "lastActive": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "WordSet": {
+      "title": "Word Set",
+      "description": "A collection of vocabulary words.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "wordCount": { "type": "number" }
+      },
+      "required": ["userId", "title"]
+    },
+    "Word": {
+      "title": "Vocabulary Word",
+      "description": "An individual word with translation and SRS data.",
+      "type": "object",
+      "properties": {
+        "english": { "type": "string" },
+        "hebrew": { "type": "string" },
+        "level": { "type": "number" },
+        "nextReview": { "type": "number" },
+        "lastReviewed": { "type": "number" }
+      },
+      "required": ["english", "hebrew"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data."
+    },
+    "/word_sets/{setId}": {
+      "schema": "WordSet",
+      "description": "Metadata for a word set."
+    },
+    "/word_sets/{setId}/words/{wordId}": {
+      "schema": "Word",
+      "description": "Individual words within a set."
+    }
+  }
+}

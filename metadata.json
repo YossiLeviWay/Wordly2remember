@@ -1,0 +1,5 @@
+{
+  "name": "Wordly 2 remember",
+  "description": "A vocabulary learning app with SRS, Excel-like word insertion, and bulk paste support.",
+  "requestFramePermissions": []
+}
