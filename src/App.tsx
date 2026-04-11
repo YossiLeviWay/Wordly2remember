@@ -375,7 +375,7 @@ export default function App() {
   }
 
   return (
-    <div className="max-w-md mx-auto h-screen w-full bg-white dark:bg-slate-950 border-x border-slate-100 dark:border-slate-900 shadow-2xl relative overflow-hidden font-sans flex flex-col">
+    <div className="max-w-md mx-auto min-h-screen w-full bg-white dark:bg-slate-950 border-x border-slate-100 dark:border-slate-900 shadow-2xl relative font-sans flex flex-col">
       <AnimatePresence mode="wait">
         {view === 'dashboard' && (
           <motion.div 
@@ -383,7 +383,7 @@ export default function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="flex-1 flex flex-col p-6 overflow-hidden"
+            className="flex-1 flex flex-col p-6"
           >
             <div className="flex justify-between items-center mb-8">
               <div className="flex items-center gap-3">
@@ -454,7 +454,7 @@ export default function App() {
               <button className="text-blue-600 text-sm font-bold">View All</button>
             </div>
 
-            <div className="space-y-3 overflow-y-auto flex-1 pb-24">
+            <div className="space-y-3 pb-24">
               {wordSets.length === 0 ? (
                 <div className="text-center py-12 text-slate-400">
                   <p>No lists yet. Create your first one!</p>
@@ -490,7 +490,7 @@ export default function App() {
               )}
             </div>
 
-            <div className="absolute bottom-0 left-0 w-full h-20 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-t border-slate-100 dark:border-slate-900 flex items-center justify-around px-8">
+            <div className="sticky bottom-0 left-0 w-full h-20 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-t border-slate-100 dark:border-slate-900 flex items-center justify-around px-8 mt-auto">
               <button className="text-blue-600"><Layout className="w-6 h-6" /></button>
               <button className="text-slate-300 hover:text-slate-400"><History className="w-6 h-6" /></button>
               <button onClick={logOut} className="text-slate-300 hover:text-red-400"><LogOut className="w-6 h-6" /></button>
@@ -658,7 +658,7 @@ function SetEditor({ user, activeSet, initialWords, onClose, onHome }: any) {
       initial={{ opacity: 0, x: 50 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -50 }}
-      className="flex-1 flex flex-col p-6 overflow-hidden"
+      className="flex-1 flex flex-col p-6"
     >
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
@@ -696,7 +696,7 @@ function SetEditor({ user, activeSet, initialWords, onClose, onHome }: any) {
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto mb-6">
+      <div className="mb-6">
         {mode === 'grid' ? (
           <div className="space-y-3">
             {words.map((word, i) => (
@@ -924,7 +924,7 @@ function SmartListView({ listId, words, onHome, onPractice, speak }: any) {
       initial={{ opacity: 0, x: 50 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -50 }}
-      className="flex-1 flex flex-col p-6 overflow-hidden"
+      className="flex-1 flex flex-col p-6"
     >
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
@@ -936,7 +936,7 @@ function SmartListView({ listId, words, onHome, onPractice, speak }: any) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-3 pb-6">
+      <div className="space-y-3 pb-6">
         {dueWords.length > 0 && (
           <Button onClick={onPractice} className="w-full py-4 mb-4 bg-blue-600">
             <Play className="w-4 h-4" />
