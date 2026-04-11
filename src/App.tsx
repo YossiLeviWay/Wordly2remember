@@ -291,6 +291,8 @@ export default function App() {
     setSessionResults([]);
     setView('session');
   };
+
+  const startSession = async (set: WordSet) => {
     setActiveSet(set);
     const path = `word_sets/${set.id}/words`;
     try {
@@ -498,6 +500,7 @@ export default function App() {
 
     {view === 'editor' && (
       <SetEditor 
+        key={activeSet?.id || 'new'}
         user={user} 
         activeSet={activeSet} 
         initialWords={activeWords} 
@@ -547,10 +550,16 @@ export default function App() {
 
 function SetEditor({ user, activeSet, initialWords, onClose, onHome }: any) {
   const [title, setTitle] = useState(activeSet?.title || '');
-  const [words, setWords] = useState<Word[]>(initialWords);
+  const [words, setWords] = useState<Word[]>(initialWords || []);
   const [bulkText, setBulkText] = useState('');
   const [mode, setMode] = useState<'grid' | 'bulk'>('grid');
   const [saving, setSaving] = useState(false);
+
+  // Sync state if props change (fallback for remounting)
+  useEffect(() => {
+    if (initialWords) setWords(initialWords);
+    if (activeSet) setTitle(activeSet.title);
+  }, [initialWords, activeSet]);
 
   const addRow = () => {
     setWords([...words, { english: '', hebrew: '', level: 0, nextReview: 0 }]);
@@ -608,6 +617,16 @@ function SetEditor({ user, activeSet, initialWords, onClose, onHome }: any) {
       const batch = writeBatch(db);
       const wordsRef = collection(db, 'word_sets', setId, 'words');
       
+      // Handle deletions: find words that were in initialWords but are not in current words
+      if (initialWords) {
+        const currentIds = new Set(words.map(w => w.id).filter(Boolean));
+        initialWords.forEach((oldWord: Word) => {
+          if (oldWord.id && !currentIds.has(oldWord.id)) {
+            batch.delete(doc(wordsRef, oldWord.id));
+          }
+        });
+      }
+
       for (const word of words) {
         if (word.id) {
           batch.update(doc(wordsRef, word.id), {
